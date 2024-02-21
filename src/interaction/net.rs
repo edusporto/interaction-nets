@@ -8,15 +8,57 @@ pub struct Net {
 }
 
 impl Net {
-    pub fn interact(&mut self, cell_key1: CellKey, cell_key2: CellKey) {
+    pub fn normalize(&mut self) {
+        while self.perform_any_interaction() {}
+    }
+
+    pub fn perform_any_interaction(&mut self) -> bool {
+        let mut connected_cells = self
+            .graph
+            .get_cells()
+            .map(|(cell_key, _)| {
+                // Match cell with its primary connection port
+                let cell = self.graph.get_cell(cell_key);
+                (cell_key, self.graph.get_port(cell.primary).cell)
+            })
+            .filter_map(|(cell_key1, connected_cell)| {
+                // Only include cells with another cell connected to their primary port
+                connected_cell.map(|cell_key2| (cell_key1, cell_key2))
+            });
+
+        let interactable = connected_cells.find(|(c1, c2)| self.can_interact(*c1, *c2));
+
+        if let Some((cell_key1, cell_key2)) = interactable {
+            drop(connected_cells);
+            self.interact(cell_key1, cell_key2);
+            return true;
+        }
+
+        false
+    }
+
+    pub fn can_interact(&self, cell_key1: CellKey, cell_key2: CellKey) -> bool {
         let cell1 = *self.graph.get_cell(cell_key1);
         let cell2 = *self.graph.get_cell(cell_key2);
 
-        if !self.graph.ports_connected(cell1.primary, cell2.primary) {
-            return;
-        }
+        self.graph.ports_connected(cell1.primary, cell2.primary)
+    }
 
-        // Prevent the interaction edge from being mistaken for another
+    pub fn try_interact(&mut self, cell_key1: CellKey, cell_key2: CellKey) -> bool {
+        if self.can_interact(cell_key1, cell_key2) {
+            self.interact(cell_key1, cell_key2);
+        }
+        true
+    }
+
+    fn interact(&mut self, cell_key1: CellKey, cell_key2: CellKey) {
+        let cell1 = *self.graph.get_cell(cell_key1);
+        let cell2 = *self.graph.get_cell(cell_key2);
+
+        // if !self.graph.ports_connected(cell1.primary, cell2.primary) {
+        //     return;
+        // }
+
         self.graph.disconnect_ports(cell1.primary, cell2.primary);
         let primary1 = cell1.primary;
         let primary2 = cell2.primary;
